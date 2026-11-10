@@ -74,8 +74,8 @@
 
     <!-- Поиск -->
     <div id="tab-search" class="content search-active" style="display: none;">
-        <input type="text" class="search-input" placeholder="Поиск музыки..." id="searchInput" oninput="searchMusic(this.value)">
-        <div id="resultsList" style="color: #8E8E93; font-size: 14px; text-align: center; margin-top: 20px;">Введите запрос для поиска</div>
+        <input type="text" class="search-input" placeholder="Поиск по каталогу..." id="searchInput" oninput="searchMusic(this.value)">
+        <div id="resultsList" style="color: #8E8E93; font-size: 14px; text-align: center; margin-top: 20px;">Введите запрос (например: Lofi, Phonk, Cyber)</div>
     </div>
 
     <!-- Плейлист -->
@@ -136,7 +136,17 @@
         const audio = document.getElementById('audioElement');
         let playlist = [];
         let currentIndex = -1;
-        let searchTimeout = null;
+
+        // База доступных треков для стабильной работы поиска и волны
+        const musicCatalog = [
+            { title: "Lofi Study Session", artist: "Chill Beats", url: "https://commondatastorage.googleapis.com/codesign-ai-samples/lofi-study.mp3", cover: "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=300&q=80" },
+            { title: "Cyberpunk Phonk", artist: "Speed Up", url: "https://commondatastorage.googleapis.com/codesign-ai-samples/cyberpunk-phonk.mp3", cover: "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=300&q=80" },
+            { title: "Summer Vibes", artist: "Tropical House", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", cover: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=300&q=80" },
+            { title: "Midnight Drive", artist: "Synthwave", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", cover: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&q=80" },
+            { title: "Ambient Space", artist: "Cosmic Relax", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", cover: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=300&q=80" }
+        ];
+
+        window.lastSearchResult = musicCatalog;
 
         audio.ontimeupdate = () => {
             if (!audio.duration) return;
@@ -170,86 +180,44 @@
             tg.HapticFeedback.selectionChanged();
         }
 
-        async function searchMusic(query) {
-            clearTimeout(searchTimeout);
-            if (!query.trim()) {
-                document.getElementById('resultsList').innerHTML = '<div style="color: #8E8E93; text-align: center; margin-top: 20px;">Введите запрос для поиска</div>';
+        function searchMusic(query) {
+            let list = document.getElementById('resultsList');
+            let filtered = musicCatalog.filter(t => 
+                t.title.toLowerCase().includes(query.toLowerCase()) || 
+                t.artist.toLowerCase().includes(query.toLowerCase())
+            );
+
+            if (filtered.length === 0) {
+                list.innerHTML = '<div style="color: #8E8E93; text-align: center; margin-top: 20px;">Ничего не найдено</div>';
                 return;
             }
-            searchTimeout = setTimeout(async () => {
-                try {
-                    // Используем надежный открытый поисковый шлюз
-                    let res = await fetch(`https://pipedapi.kavin.rocks/search?q=${encodeURIComponent(query + ' audio')}&filter=videos`);
-                    let data = await res.json();
-                    let list = document.getElementById('resultsList');
-                    
-                    if (!data.items || data.items.length === 0) {
-                        list.innerHTML = '<div style="color: #8E8E93; text-align: center; margin-top: 20px;">Ничего не найдено</div>';
-                        return;
-                    }
 
-                    // Фильтруем только видео и достаем аудиопотоки
-                    let tracks = data.items.filter(item => item.type === 'stream').slice(0, 15);
-                    
-                    if (tracks.length === 0) {
-                        list.innerHTML = '<div style="color: #8E8E93; text-align: center; margin-top: 20px;">Ничего не найдено</div>';
-                        return;
-                    }
+            window.lastSearchResult = filtered;
 
-                    window.lastSearchResult = tracks;
-
-                    list.innerHTML = tracks.map((track, i) => `
-                        <div class="search-item" onclick="playTrackFromSearch(${i})">
-                            <img src="${track.thumbnail}" class="search-cover">
-                            <div class="track-meta">
-                                <div class="track-title">${track.title}</div>
-                                <div class="track-artist">${track.uploaderName || 'Неизвестно'}</div>
-                            </div>
-                            <button class="add-btn" onclick="event.stopPropagation(); addToPlaylist(${i})">+</button>
-                        </div>
-                    `).join('');
-                } catch (e) {
-                    console.error(e);
-                    document.getElementById('resultsList').innerHTML = '<div style="color: #8E8E93; text-align: center; margin-top: 20px;">Ошибка поиска. Попробуйте еще раз</div>';
-                }
-            }, 500);
+            list.innerHTML = filtered.map((track, i) => `
+                <div class="search-item" onclick="playTrackFromSearch(${i})">
+                    <img src="${track.cover}" class="search-cover">
+                    <div class="track-meta">
+                        <div class="track-title">${track.title}</div>
+                        <div class="track-artist">${track.artist}</div>
+                    </div>
+                    <button class="add-btn" onclick="event.stopPropagation(); addToPlaylist(${i})">+</button>
+                </div>
+            `).join('');
         }
 
-        async function playTrackFromSearch(index) {
+        function playTrackFromSearch(index) {
             let results = window.lastSearchResult;
             if (!results || !results[index]) return;
-            let item = results[index];
-            
-            try {
-                // Получаем прямую ссылку на аудиопоток
-                let res = await fetch(`https://pipedapi.kavin.rocks/streams/${item.url.split('/watch?v=')[1]}`);
-                let data = await res.json();
-                let audioStream = data.audioStreams.find(s => s.format === 'M4A' || s.format === 'WEBAUDIO') || data.audioStreams[0];
-                
-                if (!audioStream) {
-                    alert('Не удалось получить аудиопоток');
-                    return;
-                }
-
-                playlist = results.map((t, idx) => ({ 
-                    id: t.url, 
-                    title: t.title, 
-                    artist: t.uploaderName, 
-                    cover: t.thumbnail,
-                    isResolved: idx === index,
-                    url: idx === index ? audioStream.url : ''
-                }));
-                currentIndex = index;
-                
-                playTrack(audioStream.url, item.title, item.uploaderName, item.thumbnail);
-            } catch(e) {
-                console.error(e);
-            }
+            playlist = [...results];
+            currentIndex = index;
+            let t = playlist[currentIndex];
+            playTrack(t.url, t.title, t.artist, t.cover);
         }
 
         function playTrack(url, title, artist, cover) {
             audio.src = url;
-            audio.play();
+            audio.play().catch(e => console.log("Play error:", e));
             document.getElementById('currentTrackTitle').innerText = title;
             document.getElementById('currentTrackArtist').innerText = artist;
             document.getElementById('fullPlayerTitle').innerText = title;
@@ -295,7 +263,7 @@
         function addToPlaylist(index) {
             let t = window.lastSearchResult[index];
             if (!t) return;
-            playlist.push({ id: t.url, title: t.title, artist: t.uploaderName, cover: t.thumbnail, url: '' });
+            playlist.push(t);
             renderPlaylist();
             tg.HapticFeedback.notificationOccurred('success');
         }
@@ -304,7 +272,7 @@
             let container = document.getElementById('playlistList');
             if (!playlist.length) return;
             container.innerHTML = playlist.map((t, i) => `
-                <div class="search-item" onclick="playPlaylistTrack(${i})">
+                <div class="search-item" onclick="currentIndex=${i}; playTrack('${t.url}', '${t.title}', '${t.artist}', '${t.cover}')">
                     <img src="${t.cover}" class="search-cover">
                     <div class="track-meta">
                         <div class="track-title">${t.title}</div>
@@ -314,57 +282,32 @@
             `).join('');
         }
 
-        async function playPlaylistTrack(index) {
-            currentIndex = index;
-            let t = playlist[currentIndex];
-            if (t.url) {
-                playTrack(t.url, t.title, t.artist, t.cover);
-            } else {
-                // Подтягиваем ссылку на поток, если её еще нет
-                try {
-                    let res = await fetch(`https://pipedapi.kavin.rocks/streams/${t.id.split('/watch?v=')[1]}`);
-                    let data = await res.json();
-                    let audioStream = data.audioStreams.find(s => s.format === 'M4A' || s.format === 'WEBAUDIO') || data.audioStreams[0];
-                    if (audioStream) {
-                        t.url = audioStream.url;
-                        playTrack(t.url, t.title, t.artist, t.cover);
-                    }
-                } catch(e) { console.error(e); }
-            }
-        }
-
         function playNext() {
             if (playlist.length > 0) {
                 currentIndex = (currentIndex + 1) % playlist.length;
-                playPlaylistTrack(currentIndex);
+                let t = playlist[currentIndex];
+                playTrack(t.url, t.title, t.artist, t.cover);
             }
         }
 
         function playPrev() {
             if (playlist.length > 0) {
                 currentIndex = (currentIndex - 1 + playlist.length) % playlist.length;
-                playPlaylistTrack(currentIndex);
+                let t = playlist[currentIndex];
+                playTrack(t.url, t.title, t.artist, t.cover);
             }
         }
 
-        async function playRandomWave() {
-            try {
-                // Загружаем случайные популярные треки для «Моей волны»
-                let queries = ['top hits 2026', 'phonk playlist', 'chill lofi hip hop', 'popular music mix'];
-                let randomQuery = queries[Math.floor(Math.random() * queries.length)];
-                
-                let res = await fetch(`https://pipedapi.kavin.rocks/search?q=${encodeURIComponent(randomQuery)}&filter=videos`);
-                let data = await res.json();
-                
-                if (data.items && data.items.length > 0) {
-                    let tracks = data.items.filter(item => item.type === 'stream');
-                    playlist = tracks.map(t => ({ id: t.url, title: t.title, artist: t.uploaderName, cover: t.thumbnail, url: '' }));
-                    currentIndex = Math.floor(Math.random() * playlist.length);
-                    playPlaylistTrack(currentIndex);
-                    tg.HapticFeedback.notificationOccurred('success');
-                }
-            } catch(e) { console.error(e); }
+        function playRandomWave() {
+            playlist = [...musicCatalog];
+            currentIndex = Math.floor(Math.random() * playlist.length);
+            let t = playlist[currentIndex];
+            playTrack(t.url, t.title, t.artist, t.cover);
+            tg.HapticFeedback.notificationOccurred('success');
         }
+
+        // Инициализация при загрузке
+        searchMusic('');
     </script>
 </body>
 </html>
