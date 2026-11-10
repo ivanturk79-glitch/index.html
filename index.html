@@ -20,19 +20,19 @@
         .wave-sub { color: #8E8E93; margin-top: 24px; font-size: 15px; text-align: center; }
 
         .search-input { width: 100%; background: #1C1C1E; border: none; border-radius: 10px; padding: 12px 16px; color: #fff; font-size: 17px; margin-bottom: 15px; outline: none; }
-        .search-item { display: flex; align-items: center; background: #1C1C1E; padding: 10px 14px; border-radius: 12px; margin-bottom: 10px; }
-        .search-cover { width: 44px; height: 44px; border-radius: 6px; background: #333; margin-right: 12px; object-fit: cover; }
-        .track-meta { flex: 1; }
-        .track-title { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
-        .track-artist { font-size: 13px; color: #8E8E93; margin-top: 2px; }
-        .add-btn { background: #2C2C2E; color: #FFD60A; border: none; width: 32px; height: 32px; border-radius: 50%; font-size: 18px; font-weight: bold; cursor: pointer; }
+        .search-item { display: flex; align-items: center; background: #1C1C1E; padding: 10px 14px; border-radius: 12px; margin-bottom: 10px; cursor: pointer; }
+        .search-cover { width: 44px; height: 44px; border-radius: 6px; background: #333; margin-right: 12px; object-fit: cover; flex-shrink: 0; }
+        .track-meta { flex: 1; overflow: hidden; margin-right: 10px; }
+        .track-title { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .track-artist { font-size: 13px; color: #8E8E93; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .add-btn { background: #2C2C2E; color: #FFD60A; border: none; width: 32px; height: 32px; border-radius: 50%; font-size: 18px; font-weight: bold; cursor: pointer; flex-shrink: 0; }
 
         /* Мини-плеер */
         .mini-player { position: fixed; bottom: 83px; left: 12px; right: 12px; background: rgba(30, 30, 32, 0.95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-radius: 14px; padding: 10px 14px; display: flex; align-items: center; border: 0.5px solid rgba(255,255,255,0.1); z-index: 10; cursor: pointer; }
         .player-cover { width: 42px; height: 42px; background: #3A3A3C; border-radius: 8px; margin-right: 12px; object-fit: cover; }
-        .player-meta { flex: 1; pointer-events: none; }
-        .player-track { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
-        .player-art { font-size: 12px; color: #8E8E93; }
+        .player-meta { flex: 1; pointer-events: none; overflow: hidden; }
+        .player-track { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .player-art { font-size: 12px; color: #8E8E93; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .play-ctrl { background: none; border: none; color: #fff; font-size: 22px; cursor: pointer; padding: 5px 10px; z-index: 11; }
 
         /* Полноэкранный плеер iOS */
@@ -44,8 +44,8 @@
         .drag-handle { width: 40px; height: 5px; background: rgba(255,255,255,0.3); border-radius: 3px; }
 
         .full-cover { width: 100%; aspect-ratio: 1/1; border-radius: 16px; background: #222; margin-bottom: 25px; object-fit: cover; box-shadow: 0 20px 40px rgba(0,0,0,0.6); }
-        .full-title { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
-        .full-artist { font-size: 16px; color: #8E8E93; margin-bottom: 20px; }
+        .full-title { font-size: 22px; font-weight: 700; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .full-artist { font-size: 16px; color: #8E8E93; margin-bottom: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         
         .progress-container { width: 100%; margin-bottom: 6px; }
         .progress-bar { width: 100%; height: 6px; background: #3A3A3C; border-radius: 3px; appearance: none; outline: none; cursor: pointer; }
@@ -170,7 +170,7 @@
             tg.HapticFeedback.selectionChanged();
         }
 
-        function searchMusic(query) {
+        async function searchMusic(query) {
             clearTimeout(searchTimeout);
             if (!query.trim()) {
                 document.getElementById('resultsList').innerHTML = '<div style="color: #8E8E93; text-align: center; margin-top: 20px;">Введите запрос для поиска</div>';
@@ -178,38 +178,73 @@
             }
             searchTimeout = setTimeout(async () => {
                 try {
-                    let res = await fetch(`https://api.jamendo.com/v3.0/tracks/?client_id=599e8471&format=json&search=${encodeURIComponent(query)}&limit=15&audioformat=mp32`);
+                    // Используем надежный открытый поисковый шлюз
+                    let res = await fetch(`https://pipedapi.kavin.rocks/search?q=${encodeURIComponent(query + ' audio')}&filter=videos`);
                     let data = await res.json();
                     let list = document.getElementById('resultsList');
                     
-                    if (!data.results || data.results.length === 0) {
+                    if (!data.items || data.items.length === 0) {
                         list.innerHTML = '<div style="color: #8E8E93; text-align: center; margin-top: 20px;">Ничего не найдено</div>';
                         return;
                     }
 
-                    window.lastSearchResult = data.results;
+                    // Фильтруем только видео и достаем аудиопотоки
+                    let tracks = data.items.filter(item => item.type === 'stream').slice(0, 15);
+                    
+                    if (tracks.length === 0) {
+                        list.innerHTML = '<div style="color: #8E8E93; text-align: center; margin-top: 20px;">Ничего не найдено</div>';
+                        return;
+                    }
 
-                    list.innerHTML = data.results.map((track, i) => `
+                    window.lastSearchResult = tracks;
+
+                    list.innerHTML = tracks.map((track, i) => `
                         <div class="search-item" onclick="playTrackFromSearch(${i})">
-                            <img src="${track.image || 'https://via.placeholder.com/100'}" class="search-cover">
+                            <img src="${track.thumbnail}" class="search-cover">
                             <div class="track-meta">
-                                <div class="track-title">${track.name}</div>
-                                <div class="track-artist">${track.artist_name}</div>
+                                <div class="track-title">${track.title}</div>
+                                <div class="track-artist">${track.uploaderName || 'Неизвестно'}</div>
                             </div>
                             <button class="add-btn" onclick="event.stopPropagation(); addToPlaylist(${i})">+</button>
                         </div>
                     `).join('');
-                } catch (e) { console.error(e); }
-            }, 400);
+                } catch (e) {
+                    console.error(e);
+                    document.getElementById('resultsList').innerHTML = '<div style="color: #8E8E93; text-align: center; margin-top: 20px;">Ошибка поиска. Попробуйте еще раз</div>';
+                }
+            }, 500);
         }
 
-        function playTrackFromSearch(index) {
+        async function playTrackFromSearch(index) {
             let results = window.lastSearchResult;
             if (!results || !results[index]) return;
-            playlist = results.map(t => ({ url: t.audio, title: t.name, artist: t.artist_name, cover: t.image }));
-            currentIndex = index;
-            let t = playlist[currentIndex];
-            playTrack(t.url, t.title, t.artist, t.cover);
+            let item = results[index];
+            
+            try {
+                // Получаем прямую ссылку на аудиопоток
+                let res = await fetch(`https://pipedapi.kavin.rocks/streams/${item.url.split('/watch?v=')[1]}`);
+                let data = await res.json();
+                let audioStream = data.audioStreams.find(s => s.format === 'M4A' || s.format === 'WEBAUDIO') || data.audioStreams[0];
+                
+                if (!audioStream) {
+                    alert('Не удалось получить аудиопоток');
+                    return;
+                }
+
+                playlist = results.map((t, idx) => ({ 
+                    id: t.url, 
+                    title: t.title, 
+                    artist: t.uploaderName, 
+                    cover: t.thumbnail,
+                    isResolved: idx === index,
+                    url: idx === index ? audioStream.url : ''
+                }));
+                currentIndex = index;
+                
+                playTrack(audioStream.url, item.title, item.uploaderName, item.thumbnail);
+            } catch(e) {
+                console.error(e);
+            }
         }
 
         function playTrack(url, title, artist, cover) {
@@ -260,7 +295,7 @@
         function addToPlaylist(index) {
             let t = window.lastSearchResult[index];
             if (!t) return;
-            playlist.push({ url: t.audio, title: t.name, artist: t.artist_name, cover: t.image });
+            playlist.push({ id: t.url, title: t.title, artist: t.uploaderName, cover: t.thumbnail, url: '' });
             renderPlaylist();
             tg.HapticFeedback.notificationOccurred('success');
         }
@@ -269,7 +304,7 @@
             let container = document.getElementById('playlistList');
             if (!playlist.length) return;
             container.innerHTML = playlist.map((t, i) => `
-                <div class="search-item" onclick="currentIndex=${i}; playTrack('${t.url}', '${t.title}', '${t.artist}', '${t.cover}')">
+                <div class="search-item" onclick="playPlaylistTrack(${i})">
                     <img src="${t.cover}" class="search-cover">
                     <div class="track-meta">
                         <div class="track-title">${t.title}</div>
@@ -279,31 +314,54 @@
             `).join('');
         }
 
+        async function playPlaylistTrack(index) {
+            currentIndex = index;
+            let t = playlist[currentIndex];
+            if (t.url) {
+                playTrack(t.url, t.title, t.artist, t.cover);
+            } else {
+                // Подтягиваем ссылку на поток, если её еще нет
+                try {
+                    let res = await fetch(`https://pipedapi.kavin.rocks/streams/${t.id.split('/watch?v=')[1]}`);
+                    let data = await res.json();
+                    let audioStream = data.audioStreams.find(s => s.format === 'M4A' || s.format === 'WEBAUDIO') || data.audioStreams[0];
+                    if (audioStream) {
+                        t.url = audioStream.url;
+                        playTrack(t.url, t.title, t.artist, t.cover);
+                    }
+                } catch(e) { console.error(e); }
+            }
+        }
+
         function playNext() {
             if (playlist.length > 0) {
                 currentIndex = (currentIndex + 1) % playlist.length;
-                let t = playlist[currentIndex];
-                playTrack(t.url, t.title, t.artist, t.cover);
+                playPlaylistTrack(currentIndex);
             }
         }
 
         function playPrev() {
             if (playlist.length > 0) {
                 currentIndex = (currentIndex - 1 + playlist.length) % playlist.length;
-                let t = playlist[currentIndex];
-                playTrack(t.url, t.title, t.artist, t.cover);
+                playPlaylistTrack(currentIndex);
             }
         }
 
         async function playRandomWave() {
             try {
-                let res = await fetch(`https://api.jamendo.com/v3.0/tracks/?client_id=599e8471&format=json&limit=25&audioformat=mp32`);
+                // Загружаем случайные популярные треки для «Моей волны»
+                let queries = ['top hits 2026', 'phonk playlist', 'chill lofi hip hop', 'popular music mix'];
+                let randomQuery = queries[Math.floor(Math.random() * queries.length)];
+                
+                let res = await fetch(`https://pipedapi.kavin.rocks/search?q=${encodeURIComponent(randomQuery)}&filter=videos`);
                 let data = await res.json();
-                if (data.results && data.results.length > 0) {
-                    playlist = data.results.map(t => ({ url: t.audio, title: t.name, artist: t.artist_name, cover: t.image }));
+                
+                if (data.items && data.items.length > 0) {
+                    let tracks = data.items.filter(item => item.type === 'stream');
+                    playlist = tracks.map(t => ({ id: t.url, title: t.title, artist: t.uploaderName, cover: t.thumbnail, url: '' }));
                     currentIndex = Math.floor(Math.random() * playlist.length);
-                    let t = playlist[currentIndex];
-                    playTrack(t.url, t.title, t.artist, t.cover);
+                    playPlaylistTrack(currentIndex);
+                    tg.HapticFeedback.notificationOccurred('success');
                 }
             } catch(e) { console.error(e); }
         }
